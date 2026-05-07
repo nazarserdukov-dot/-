@@ -2,96 +2,91 @@ import streamlit as st
 import pandas as pd
 import os
 
-#Налаштування файлу даних
+# Налаштування сторінки
+st.set_page_config(page_title="Cyber Tracker", layout="wide")
+
 DATA_FILE = "data.csv"
 
-#Функція для завантаження даних
+# Функція завантаження даних
 def load_data():
     if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
+        df = pd.read_csv(DATA_FILE)
+        # Перетворюємо дату у формат datetime для графіків
+        df['date'] = pd.to_datetime(df['date'])
+        return df
     return pd.DataFrame(columns=["date", "type", "severity", "description"])
 
-#Навігація в боковій панелі
-st.sidebar.title("Навігація")
-page = st.sidebar.radio("Оберіть сторінку:", ["Додати інцидент", "Аналітика та порівняння"])
+# --- БОКОВА ПАНЕЛЬ (КЕРУВАННЯ) ---
+st.sidebar.header("Меню керування")
+page = st.sidebar.selectbox("Перейти до розділу:", ["➕ Реєстрація інцидентів", "📈 Аналітика та порівняння"])
 
-#ДОДАТИ ІНЦИДЕНТ
-if page == "Додати інцидент":
-    st.title("🛡️ Реєстрація кіберінцидентів")
+# --- СТОРІНКА 1: ДОДАТИ ІНЦИДЕНТ ---
+if page == "➕ Реєстрація інцидентів":
+    st.title("🛡️ Новий запис про кіберінцидент")
+    st.info("Заповніть форму нижче, щоб додати подію до бази даних.")
     
-    with st.form("incident_form"):
-        date = st.date_input("Дата події")
-        type_inc = st.selectbox("Тип інциденту", ["Phishing", "Malware", "DDoS", "SQL Injection", "Ransomware"])
-        severity = st.select_slider("Рівень загрози", options=["low", "medium", "high"])
-        desc = st.text_area("Опис інциденту")
+    with st.form("incident_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            date = st.date_input("Дата виявлення")
+            type_inc = st.selectbox("Тип загрози", ["Phishing", "Malware", "DDoS", "SQL Injection", "Ransomware"])
+        with col2:
+            severity = st.select_slider("Рівень важливості", options=["low", "medium", "high"])
         
-        submit = st.form_submit_button("Зберегти у базу")
+        desc = st.text_area("Детальний опис інциденту")
+        
+        submit = st.form_submit_button("Зберегти дані")
 
     if submit:
-        new_data = {
-            "date": str(date),
+        new_row = {
+            "date": date,
             "type": type_inc,
             "severity": severity,
             "description": desc
         }
-        df_new = pd.DataFrame([new_data])
-        
+        df_new = pd.DataFrame([new_row])
         df_existing = load_data()
         df_final = pd.concat([df_existing, df_new], ignore_index=True)
         df_final.to_csv(DATA_FILE, index=False)
-        
-        st.success(f"Інцидент '{type_inc}' успішно додано!")
+        st.success("✅ Інцидент успішно зареєстровано!")
 
-#АНАЛІТИКА ТА ПОРІВНЯННЯ
-elif page == "Аналітика та порівняння":
-    st.title("📊 Аналітика та порівняння")
+# --- СТОРІНКА 2: АНАЛІТИКА ТА ПОРІВНЯННЯ ---
+elif page == "📈 Аналітика та порівняння":
+    st.title("📊 Аналітичний дашборд")
     
     df = load_data()
 
     if not df.empty:
-        #Загальна таблиця
-        st.subheader("Список усіх інцидентів")
-        st.dataframe(df, use_container_width=True)
-
-        #Розподіл на колонки для статистики
-        col1, col2 = st.columns(2)
+        # Верхні показники (Метрики)
+        total = len(df)
+        st.metric("Загальна кількість зафіксованих подій", total)
         
-        with col1:
-            st.metric("Загальна кількість", len(df))
-        
-        with col2:
-            most_common = df["type"].mode()[0] if not df["type"].empty else "Н/Д"
-            st.metric("Найчастіша загроза", most_common)
-
         st.divider()
 
-        #Порівняння за типами (Графік)
-        st.subheader("Порівняння кількості за типами")
-        type_counts = df["type"].value_counts()
-        st.bar_chart(type_counts)
+        # ЛІНІЙНИЙ ГРАФІК (Динаміка за часом)
+        st.subheader("📉 Динаміка інцидентів у часі")
+        # Групуємо кількість інцидентів за датами
+        timeline_df = df.groupby('date').size().reset_index(name='Кількість')
+        timeline_df = timeline_df.set_index('date')
+        st.line_chart(timeline_df)
 
-        # --- ЗАМІНІТЬ СЕКЦІЮ 3 НА ЦЕЙ КОД ---
-
-        # Секція 3: Аналіз критичності
-        st.subheader("Аналіз критичності (Severity)")
-        severity_counts = df["severity"].value_counts()
+        # СЕКЦІЯ ПОРІВНЯННЯ
+        st.subheader("⚖️ Порівняння параметрів")
+        col_left, col_right = st.columns(2)
         
-        # Якщо st.pie_chart не працює, використовуємо горизонтальний bar_chart
-        st.bar_chart(severity_counts)
+        with col_left:
+            st.write("**Кількість за типами:**")
+            type_counts = df["type"].value_counts()
+            st.bar_chart(type_counts)
+            
+        with col_right:
+            st.write("**Розподіл за критичністю:**")
+            severity_summary = df.groupby('severity').size()
+            st.table(severity_summary)
 
-        # Секція 4: Детальне порівняння (Таблиця агрегації)
-        st.subheader("Зведена аналітика")
-        # Рахуємо кількість інцидентів за типом та рівнем
-        summary_df = df.groupby(['type', 'severity']).size().reset_index(name='Кількість')
-        st.dataframe(summary_df, use_container_width=True)
-
-        #Детальне порівняння (Таблиця агрегації)
-        st.subheader("Зведена аналітика")
-        summary_df = df.groupby('type').agg(
-            кількість=('type', 'count')
-        ).sort_values(by='кількість', ascending=False)
-        
-        st.table(summary_df)
-        
+        # ПОВНА ТАБЛИЦЯ
+        with st.expander("Переглянути всі сирі дані"):
+            st.dataframe(df.sort_values(by='date', ascending=False), use_container_width=True)
+            
     else:
-        st.warning("База даних порожня. Додайте перший інцидент на відповідній сторінці.")
+        st.warning("Дані відсутні. Будь ласка, додайте інформацію на першій сторінці.")
