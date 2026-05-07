@@ -70,10 +70,20 @@ elif page == "Аналітика та порівняння":
         type_counts = df["type"].value_counts()
         st.bar_chart(type_counts)
 
-        #Порівняння за рівнем важливості
-        st.subheader("Аналіз критичності")
+        # --- ЗАМІНІТЬ СЕКЦІЮ 3 НА ЦЕЙ КОД ---
+
+        # Секція 3: Аналіз критичності
+        st.subheader("Аналіз критичності (Severity)")
         severity_counts = df["severity"].value_counts()
-        st.pie_chart(severity_counts)
+        
+        # Якщо st.pie_chart не працює, використовуємо горизонтальний bar_chart
+        st.bar_chart(severity_counts)
+
+        # Секція 4: Детальне порівняння (Таблиця агрегації)
+        st.subheader("Зведена аналітика")
+        # Рахуємо кількість інцидентів за типом та рівнем
+        summary_df = df.groupby(['type', 'severity']).size().reset_index(name='Кількість')
+        st.dataframe(summary_df, use_container_width=True)
 
         #Детальне порівняння (Таблиця агрегації)
         st.subheader("Зведена аналітика")
